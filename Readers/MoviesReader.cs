@@ -1,28 +1,32 @@
 using IMDbApplication.Models;
+using System.Diagnostics;
 
-namespace IMDbApplication.Reader;
+namespace IMDbApplication.Readers;
 
 public class MoviesReader
 {
     public static Dictionary<string, Movie> LoadMovies(string path)
     {
+        var stopwatch = Stopwatch.StartNew();
         var movies = new Dictionary<string, Movie>();
-        
-        // titleId	ordering	title	region	language	types	attributes	isOriginalTitle
+        int totalLines = 0;
         
         using (var reader = new StreamReader(path))
         {
             string? line;
-
-            reader.ReadLine(); // header
+            reader.ReadLine(); // skip header
             
             while ((line = reader.ReadLine()) != null)
             {
-                var splittedLine = line.Split('\t');
-                string imdbID = splittedLine[0];
-                string title = splittedLine[2];
-                string region = splittedLine[3].ToLower();
-                string language = splittedLine[4].ToUpper();
+                totalLines++;
+                var parts = line.Split('\t');
+                if (parts.Length < 5) continue;
+                
+                string imdbID = parts[0];
+                string title = parts[2];
+                string region = parts[3].ToLower();
+                string language = parts[4].ToUpper();
+                
                 bool isSuitable = (region == "us" || region == "ru") ||
                                   (language == "us" || language == "ru");
 
@@ -37,8 +41,10 @@ public class MoviesReader
                     );
                 }
             }
-            
-            return movies;
         }
+        
+        stopwatch.Stop();
+        Console.WriteLine($"Loaded {movies.Count}/{totalLines} lines in {stopwatch.ElapsedMilliseconds} ms");
+        return movies;
     }
 }

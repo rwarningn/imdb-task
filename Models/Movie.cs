@@ -3,11 +3,25 @@ namespace IMDbApplication.Models;
 public class Movie
 {
     public int ID { get; set; }
-    public string ImdbID { get; set; }
-    public string Title { get; set; }
-    public float Rating { get; set; }
-    public string Director { get; set; }
-    public HashSet<string> Actors { get; set; }
-    public HashSet<string> Tags { get; set; }
-    public float Raiting { get; set; } = -1;
+    public string ImdbID { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public float Rating { get; set; } = -1;
+    public string Director { get; set; } = string.Empty;
+    public HashSet<string> Actors { get; set; } = new HashSet<string>();
+    public HashSet<string> Tags { get; set; } = new HashSet<string>();
+    
+    public override bool Equals(object? obj)
+    {
+        return obj is Movie movie && ImdbID == movie.ImdbID;
+    }
+    
+    public override int GetHashCode()
+    {
+        return ImdbID.GetHashCode();
+    }
+    
+    public override string ToString()
+    {
+        return $"{Title} ({ImdbID}) - Rating: {Rating}";
+    }
 }
