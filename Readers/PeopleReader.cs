@@ -35,54 +35,24 @@ public class PeopleReader
             }
         });
 
+
         var localDictionaries = new ConcurrentBag<Dictionary<string, Person>>();
         var processorCount = Environment.ProcessorCount;
         var parserTasks = new Task[processorCount];
         var personIdCounter = 0;
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
             parserTasks[i] = Task.Run(() =>
             {
-                var localResult = new Dictionary<string, Person>(1_200_000);
+                var localResult = new Dictionary<string, Person>(2_500_000);
 
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
+                    if (HardcodedParsers.TryParsePersonLine(line, out var parsed))
                     {
-                        // only nconst, primaryName, birthYear and deathYear
-                        var fields = StringParser.ExtractTSVFields(line, 0, 1, 2, 3);
-
-                        if (fields.Length < 4) continue;
-
-                        string nconst = fields[0];
-                        string fullName = fields[1];
-
-                        // Parse name
-                        int spaceIdx = fullName.IndexOf(' ');
-                        string firstName = spaceIdx > 0 ? fullName.Substring(0, spaceIdx) : fullName;
-                        string lastName = spaceIdx > 0 ? fullName.Substring(spaceIdx + 1) : "";
-
-                        int.TryParse(fields[2], out int birthYear);
-                        int? deathYear = fields[3] != "\\N" && int.TryParse(fields[3], out int death) ? death : null;
-
-                        localResult[nconst] = new Person
-                        {
-                            ID = Interlocked.Increment(ref personIdCounter),
-                            FirstName = firstName,
-                            LastName = lastName,
-                            BirthYear = birthYear,
-                            DeathYear = deathYear
-                        };
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
-                        {
-                            Console.WriteLine($"[People Parser] Error parsing line: {ex.Message}");
-                        }
+                        parsed.person.ID = Interlocked.Increment(ref personIdCounter);
+                        localResult[parsed.nconst] = parsed.person;
                     }
                 }
                 localDictionaries.Add(localResult);
@@ -92,25 +62,22 @@ public class PeopleReader
         readerTask.Wait();
         Task.WaitAll(parserTasks);
 
-        var finalPeople = new Dictionary<string, Person>(totalLines);
-        foreach (var localDict in localDictionaries)
+        var largestDict = localDictionaries.OrderByDescending(d => d.Count).First();
+
+         foreach (var localDict in localDictionaries)
         {
+            if (ReferenceEquals(largestDict, localDict)) continue; 
             foreach (var pair in localDict)
             {
-                finalPeople[pair.Key] = pair.Value;
-            }            
+                largestDict.TryAdd(pair.Key, pair.Value); 
+            }
         }
 
-
-        if (errorCount > 0)
-        {
-            Console.WriteLine($"Warning: {errorCount} lines were skipped");
-        }
 
         stopwatch.Stop();
-        Console.WriteLine($"Loaded {finalPeople.Count} people from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
+        Console.WriteLine($"Loaded {largestDict.Count} people from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
 
-        return finalPeople;
+        return largestDict;
     }
 
     public static void LinkPeopleToMovies(Dictionary<string, Movie> movies,
@@ -147,7 +114,6 @@ public class PeopleReader
         var localLinks = new ConcurrentBag<List<(Movie movie, Person person, string category)>>();
 
         var parserTasks = new Task[processorCount];
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
@@ -157,30 +123,12 @@ public class PeopleReader
 
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
+                    if (HardcodedParsers.TryParseLinkLine(line, out var link))
                     {
-                        // only tconst, nconst, category
-                        var fields = StringParser.ExtractTSVFields(line, 0, 2, 3);
-
-                        if (fields.Length < 3) continue;
-
-                        string tconst = fields[0];
-                        string nconst = fields[1];
-                        string category = fields[2];
-
-                        if (movies.TryGetValue(tconst, out var movie) &&
-                            peopleIndex.TryGetValue(nconst, out var person))
+                        if (movies.TryGetValue(link.tconst, out var movie) &&
+                            peopleIndex.TryGetValue(link.nconst, out var person))
                         {
-                            localResult.Add((movie, person, category));
-                        }
-
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
-                        {
-                            Console.WriteLine($"[Link People To Movies] Error connection lines: {ex.Message}");
+                            localResult.Add((movie, person, link.category));
                         }
                     }
                 }
@@ -191,28 +139,51 @@ public class PeopleReader
         readerTask.Wait();
         Task.WaitAll(parserTasks);
 
-        int linksCreated = 0;
-        foreach (var localList in localLinks)
+
+        var allLinks = new List<(Movie movie, Person person, string category)>();
+        foreach (var list in localLinks)
         {
-            foreach (var (movie, person, category) in localList)
-            {
-                if (category == "director")
-                {
-                    movie.Director = person.FullName;
-                    person.DirectedMovies.Add(movie);
-                    linksCreated++;
-                }
-                else if (category == "actor" || category == "actress")
-                {
-                    movie.Actors.Add(person.FullName);
-                    person.ActedMovies.Add(movie);
-                    linksCreated++;
-                }
-            }
+            allLinks.AddRange(list);
         }
 
-
         stopwatch.Stop();
-        Console.WriteLine($"Created {linksCreated} people-movie links from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
+        Console.WriteLine($"Parsed links and found objects in {stopwatch.ElapsedMilliseconds} ms");
+
+        var mergeStopwatch = Stopwatch.StartNew();
+        int linksCreated = 0;
+
+        Parallel.ForEach(allLinks, link =>
+        {
+            if (link.category == "director")
+            {
+                lock (link.movie)
+                {
+                    link.movie.Director = link.person.FullName;
+                }
+                
+                lock (link.person.DirectedMovies)
+                {
+                    link.person.DirectedMovies.Add(link.movie);
+                }
+                Interlocked.Increment(ref linksCreated);
+            }
+            else // actor or actress
+            {
+                lock (link.movie.Actors)
+                {
+                    link.movie.Actors.Add(link.person.FullName);
+                }
+                
+                lock (link.person.ActedMovies)
+                {
+                    link.person.ActedMovies.Add(link.movie);
+                }
+                Interlocked.Increment(ref linksCreated);
+            }
+        });
+
+        mergeStopwatch.Stop();
+
+        Console.WriteLine($"Created {linksCreated} people-movie links from {totalLines} records in {mergeStopwatch.ElapsedMilliseconds} ms");
     }
 }

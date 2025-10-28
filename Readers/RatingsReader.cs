@@ -41,7 +41,6 @@ public class RatingsReader
         });
 
         var parserTasks = new Task[processorCount];
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
@@ -49,31 +48,14 @@ public class RatingsReader
             {
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
+                    if (HardcodedParsers.TryParseRatingLine(line, out var parsed) &&
+                        movies.TryGetValue(parsed.tconst, out var movie))
                     {
-                        // only tconst, averageRating
-                        string tconst = StringParser.ExtractTSVField(line, 0);
-                        string ratingStr = StringParser.ExtractTSVField(line, 1);
-
-                        if (float.TryParse(ratingStr, NumberStyles.Any, CultureInfo.InvariantCulture,
-                             out float rating) &&
-                            movies.TryGetValue(tconst, out var movie))
+                        lock (movie)
                         {
-                            lock (movie)
-                            {
-                                movie.Rating = rating;
-
-                            }
-                            Interlocked.Increment(ref ratingsLoaded);
+                            movie.Rating = parsed.rating;
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
-                        {
-                            Console.WriteLine($"[Rating Parser] Error parsing line: {ex.Message}");
-                        }
+                        Interlocked.Increment(ref ratingsLoaded);
                     }
                 }
             });

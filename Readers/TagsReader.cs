@@ -2,7 +2,6 @@ using IMDbApplication.Models;
 using IMDbApplication.Utilities;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Globalization;
 
 namespace IMDbApplication.Readers;
 
@@ -42,7 +41,6 @@ public class TagsReader
         });
 
         var parserTasks = new Task[processorCount];
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
@@ -50,23 +48,9 @@ public class TagsReader
             {
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
+                    if (HardcodedParsers.TryParseMovieLensLinkLine(line, out var parsed))
                     {
-                        // only movieId, imdbId
-                        string movieLensId = StringParser.ExtractCSVField(line, 0);
-                        string imdbIdRaw = StringParser.ExtractCSVField(line, 1);
-
-                        string imdbId = imdbIdRaw.StartsWith("tt") ? imdbIdRaw : "tt" + imdbIdRaw;
-
-                        linksQueue.Add(new KeyValuePair<string, string>(movieLensId, imdbId));
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
-                        {
-                            Console.WriteLine($"[Tags Parsing] Error parsing line: {ex.Message}");
-                        }
+                        linksQueue.Add(new KeyValuePair<string, string>(parsed.movieLensId, parsed.imdbId));
                     }
                 }
             });
@@ -125,7 +109,6 @@ public class TagsReader
         });
 
         var parserTasks = new Task[processorCount];
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
@@ -133,25 +116,9 @@ public class TagsReader
             {
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
+                    if (HardcodedParsers.TryParseTagCodeLine(line, out var parsed))
                     {
-                        // only tagId, tag
-                        int commaIdx = line.IndexOf(',');
-                        if (commaIdx > 0 && commaIdx < line.Length - 1)
-                        {
-                            string tagId = line.Substring(0, commaIdx);
-                            string tagName = line.Substring(commaIdx + 1);
-
-                            tagsQueue.Add(new KeyValuePair<string, string>(tagId, tagName));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
-                        {
-                            Console.WriteLine($"[Tag Names] Error parsing line: {ex.Message}");
-                        }
+                        tagsQueue.Add(new KeyValuePair<string, string>(parsed.tagId, parsed.tagName));
                     }
                 }
             });
@@ -182,7 +149,6 @@ public class TagsReader
                                       string tagScoresPath)
     {
         var stopwatch = Stopwatch.StartNew();
-        int tagsProcessed = 0;
         int totalLines = 0;
         int relevantTags = 0;
 
@@ -212,54 +178,64 @@ public class TagsReader
             }
         });
 
+        var localTagLinks = new ConcurrentBag<List<(Movie movie, string tagName)>>();
         var parserTasks = new Task[processorCount];
-        int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
             parserTasks[i] = Task.Run(() =>
             {
+                var localResult = new List<(Movie movie, string tagName)>();
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
-                    try
-                    {
-                        // only movieId, tagId, relevance
-                        var fields = StringParser.ExtractCSVFields(line, 0, 1, 2);
-                        string movieLensId = fields[0];
-                        string tagId = fields[1];
-                        string relevanceStr = fields[2];
 
-                        if (float.TryParse(relevanceStr, NumberStyles.Any, CultureInfo.InvariantCulture,
-                                out float relevance) && relevance > 0.5f)
-                        {
-                            Interlocked.Increment(ref relevantTags);
-
-                            if (movieLensToImdb.TryGetValue(movieLensId, out string? imdbId) &&
-                                movies.TryGetValue(imdbId, out var movie) &&
-                                tagsIndex.TryGetValue(tagId, out string? tagName))
-                            {
-                                lock (movie.Tags)
-                                {
-                                    movie.Tags.Add(tagName);
-                                }
-                                Interlocked.Increment(ref tagsProcessed);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
+                    if (HardcodedParsers.TryParseTagScoreLine(line, out var result, out var relevance))
                     {
-                        Interlocked.Increment(ref errorCount);
-                        if (errorCount <= 10)
+                        string movieLensId = result.movieId;
+                        string tagId = result.tagId;
+
+                        Interlocked.Increment(ref relevantTags);
+
+                        if (movieLensToImdb.TryGetValue(movieLensId, out string? imdbId) &&
+                            movies.TryGetValue(imdbId, out var movie) &&
+                            tagsIndex.TryGetValue(tagId, out string? tagName))
                         {
-                            Console.WriteLine($"[People Parser] Error parsing line: {ex.Message}");
+
+                            localResult.Add((movie, tagName));
                         }
                     }
                 }
+                localTagLinks.Add(localResult);
             });
         }
 
         readerTask.Wait();
         Task.WaitAll(parserTasks);
+
+        var allTagLinks = new List<(Movie movie, string tagName)>();
+        foreach (var ls in localTagLinks)
+        {
+            allTagLinks.AddRange(ls);
+        }
+
+        var groupedByMovie = allTagLinks.GroupBy(link => link.movie);
+
+        int tagsProcessed = 0;
+
+        Parallel.ForEach(groupedByMovie, movieGroup =>
+        {
+            var movie = movieGroup.Key;
+
+            lock (movie.Tags)
+            {
+                foreach (var (_, tagName) in movieGroup)
+                {
+                    movie.Tags.Add(tagName);
+                }
+            }
+
+            Interlocked.Add(ref tagsProcessed, movieGroup.Count());
+        });
 
         stopwatch.Stop();
         Console.WriteLine($"Processed {tagsProcessed} tags for movies");

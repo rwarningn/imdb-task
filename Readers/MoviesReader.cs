@@ -55,27 +55,13 @@ public class MoviesReader
                 {
                     try
                     {
-                        // only titleId, title, region and language
-                        var fields = StringParser.ExtractTSVFields(line, 0, 2, 3, 4);
-
-                        if (fields.Length < 4) continue;
-
-                        string imdbID = fields[0];
-                        string title = fields[1];
-                        string region = fields[2].ToLower();
-                        string language = fields[3].ToUpper();
-
-                        // filter by language/region
-                        bool isSuitable = (region == "us" || region == "ru") ||
-                                          (language == "EN" || language == "RU");
-
-                        if (isSuitable)
+                        if (HardcodedParsers.TryParseMovieLine(line, out var parsed))
                         {
                             var movie = new Movie
                             {
                                 ID = Interlocked.Increment(ref movieIdCounter),
-                                ImdbID = imdbID,
-                                Title = title
+                                ImdbID = parsed.ImdbID,
+                                Title = parsed.Title
                             };
 
                             moviesQueue.Add(movie);
