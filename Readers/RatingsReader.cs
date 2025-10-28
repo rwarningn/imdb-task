@@ -1,6 +1,7 @@
 using IMDbApplication.Models;
 using IMDbApplication.Utilities;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Diagnostics;
 
 namespace IMDbApplication.Readers;
@@ -54,10 +55,15 @@ public class RatingsReader
                         string tconst = StringParser.ExtractTSVField(line, 0);
                         string ratingStr = StringParser.ExtractTSVField(line, 1);
 
-                        if (float.TryParse(ratingStr, out float rating) &&
+                        if (float.TryParse(ratingStr, NumberStyles.Any, CultureInfo.InvariantCulture,
+                             out float rating) &&
                             movies.TryGetValue(tconst, out var movie))
                         {
-                            movie.Rating = rating;
+                            lock (movie)
+                            {
+                                movie.Rating = rating;
+
+                            }
                             Interlocked.Increment(ref ratingsLoaded);
                         }
                     }
