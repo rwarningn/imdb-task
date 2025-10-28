@@ -4,8 +4,9 @@ namespace IMDbApplication.Services;
 
 public class DataPrinter
 {
+    static string template = string.Concat(Enumerable.Repeat("=" , 50));  
     public static void PrintMovieInfo(string movieTitle, Dictionary<string, Movie> movies)
-    {
+    { 
         var movie = movies.Values.FirstOrDefault(m => 
             m.Title.Equals(movieTitle, StringComparison.OrdinalIgnoreCase));
         
@@ -15,9 +16,9 @@ public class DataPrinter
             return;
         }
         
-        Console.WriteLine($"\n{'='*50}");
+        Console.WriteLine($"\n{template}");
         Console.WriteLine($"MOVIE INFO");
-        Console.WriteLine($"{'='*50}");
+        Console.WriteLine($"{template}"); 
         Console.WriteLine($"Title: {movie.Title}");
         Console.WriteLine($"IMDB ID: {movie.ImdbID}");
         Console.WriteLine($"Rating: {(movie.Rating > 0 ? movie.Rating.ToString("F1") + "/10" : "N/D")}");
@@ -32,7 +33,7 @@ public class DataPrinter
         if (movie.Actors.Count > 15)
             Console.WriteLine($"  ... and more {movie.Actors.Count - 15} actors");
         
-        Console.WriteLine($"\nТеги ({movie.Tags.Count}):");
+        Console.WriteLine($"\nTags ({movie.Tags.Count}):");
         var tagsList = movie.Tags.Take(15).ToList();
         for (int i = 0; i < tagsList.Count; i++)
         {
@@ -51,9 +52,9 @@ public class DataPrinter
         }
         
         var movies = peopleToMovies[personName];
-        Console.WriteLine($"\n{'='*50}");
+        Console.WriteLine($"\n{template}");
         Console.WriteLine($"INFORMATION ABOUT {personName.ToUpper()}");
-        Console.WriteLine($"{'='*50}");
+        Console.WriteLine($"{template}");
         Console.WriteLine($"Participated in {movies.Count} movies:");
         
         var sortedMovies = movies.OrderByDescending(m => m.Rating).Take(20).ToList();
@@ -78,9 +79,9 @@ public class DataPrinter
         }
         
         var movies = tagsToMovies[tagName];
-        Console.WriteLine($"\n{'='*50}");
+        Console.WriteLine($"\n{template}");
         Console.WriteLine($"MOVIES WITH TAG '{tagName.ToUpper()}'");
-        Console.WriteLine($"{'='*50}");
+        Console.WriteLine($"{template}");
         Console.WriteLine($"Found {movies.Count} movies:");
         
         var sortedMovies = movies.OrderByDescending(m => m.Rating).Take(20).ToList();

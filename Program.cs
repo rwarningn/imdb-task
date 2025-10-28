@@ -13,13 +13,13 @@ public class Program
             var programStopwatch = Stopwatch.StartNew();
             
             var (movies, peopleToMovies, tagsToMovies) = DataProcessor.LoadAllData(
-                movieCodesPath: "../../../data/MovieCodes_IMDB.tsv",
-                actorNamesPath: "../../../data/ActorsDirectorsNames_IMDB.txt", 
-                actorCodesPath: "../../../data/ActorsDirectorsCodes_IMDB.tsv",
-                ratingsPath: "../../../data/Ratings_IMDB.tsv",
-                linksPath: "../../../data/links_IMDB_MovieLens.csv", 
-                tagCodesPath: "../../../data/TagCodes_MovieLens.csv",
-                tagScoresPath: "../../../data/TagScores_MovieLens.csv"
+                movieCodesPath: "data/MovieCodes_IMDB.tsv",
+                actorNamesPath: "data/ActorsDirectorsNames_IMDB.txt", 
+                actorCodesPath: "data/ActorsDirectorsCodes_IMDB.tsv",
+                ratingsPath: "data/Ratings_IMDB.tsv",
+                linksPath: "data/links_IMDB_MovieLens.csv", 
+                tagCodesPath: "data/TagCodes_MovieLens.csv",
+                tagScoresPath: "data/TagScores_MovieLens.csv"
             );
             
             DataPrinter.PrintStatistics(movies, peopleToMovies, tagsToMovies);
