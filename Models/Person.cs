@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+
+
 namespace IMDbApplication.Models;
 
 public class Person
@@ -10,6 +13,6 @@ public class Person
 
     public List<Movie> ActedMovies { get; set; } = new List<Movie>();
     public List<Movie> DirectedMovies { get; set; } = new List<Movie>();
-    
+
     public string FullName => $"{FirstName} {LastName}".Trim();
 }
