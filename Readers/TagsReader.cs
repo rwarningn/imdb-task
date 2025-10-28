@@ -2,6 +2,7 @@ using IMDbApplication.Models;
 using IMDbApplication.Utilities;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace IMDbApplication.Readers;
 
@@ -223,12 +224,13 @@ public class TagsReader
                     try
                     {
                         // only movieId, tagId, relevance
-                        var fields = StringParser.ExtractCSVField(line, 0);
-                        string movieLensId = fields;
-                        string tagId = StringParser.ExtractCSVField(line, 1);
-                        string relevanceStr = StringParser.ExtractCSVField(line, 2);
+                        var fields = StringParser.ExtractCSVFields(line, 0, 1, 2);
+                        string movieLensId = fields[0];
+                        string tagId = fields[1];
+                        string relevanceStr = fields[2];
 
-                        if (float.TryParse(relevanceStr, out float relevance) && relevance > 0.5f)
+                        if (float.TryParse(relevanceStr, NumberStyles.Any, CultureInfo.InvariantCulture,
+                                out float relevance) && relevance > 0.5f)
                         {
                             Interlocked.Increment(ref relevantTags);
 

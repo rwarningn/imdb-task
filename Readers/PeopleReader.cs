@@ -104,6 +104,11 @@ public class PeopleReader
         peopleQueue.CompleteAdding();
         aggregatorTask.Wait();
 
+        if (errorCount > 0)
+        {
+            Console.WriteLine($"Warning: {errorCount} lines were skipped");
+        }
+
         stopwatch.Stop();
         Console.WriteLine($"Loaded {people.Count} people from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
 
@@ -120,7 +125,6 @@ public class PeopleReader
 
         var processorCount = Environment.ProcessorCount;
 
-        var linkOperations = new ConcurrentBag<Action>();
         var linesQueue = new BlockingCollection<string>(boundedCapacity: 10000);
 
         // Reader
@@ -157,7 +161,7 @@ public class PeopleReader
                 {
                     try
                     {
-                        // Extract: tconst(0), nconst(2), category(3)
+                        // only tconst, nconst, category
                         var fields = StringParser.ExtractTSVFields(line, 0, 2, 3);
 
                         if (fields.Length < 3) continue;
@@ -169,32 +173,32 @@ public class PeopleReader
                         if (movies.TryGetValue(tconst, out var movie) &&
                             peopleIndex.TryGetValue(nconst, out var person))
                         {
-                            // Create link operation
-                            linkOperations.Add(() =>
+
+                            if (category == "director")
                             {
-                                if (category == "director")
+                                lock (movie)
                                 {
-                                    lock (movie)
-                                    {
-                                        movie.Director = person.FullName;
-                                    }
-                                    lock (person.DirectedMovies)
-                                    {
-                                        person.DirectedMovies.Add(movie);
-                                    }
+                                    movie.Director = person.FullName;
                                 }
-                                else if (category == "actor" || category == "actress")
+
+                                lock (person.DirectedMovies)
                                 {
-                                    lock (movie.Actors)
-                                    {
+                                    person.DirectedMovies.Add(movie);
+                                }
+                            }
+                            else if (category == "actor" || category == "actress")
+                            {
+                                lock (movie.Actors)
+                                {
+                                    if (!movie.Actors.Contains(person.FullName))
                                         movie.Actors.Add(person.FullName);
-                                    }
-                                    lock (person.ActedMovies)
-                                    {
-                                        person.ActedMovies.Add(movie);
-                                    }
                                 }
-                            });
+
+                                lock (person.ActedMovies)
+                                {
+                                    person.ActedMovies.Add(movie);
+                                }
+                            }
 
                             Interlocked.Increment(ref linksCreated);
                         }
@@ -214,12 +218,8 @@ public class PeopleReader
         readerTask.Wait();
         Task.WaitAll(parserTasks);
 
-        var linkStopwatch = Stopwatch.StartNew();
-        Parallel.ForEach(linkOperations, operation => operation());
-        linkStopwatch.Stop();
 
         stopwatch.Stop();
         Console.WriteLine($"Created {linksCreated} people-movie links from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
-        Console.WriteLine($"Link execution time: {linkStopwatch.ElapsedMilliseconds} ms");
     }
 }

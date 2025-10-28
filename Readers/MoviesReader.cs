@@ -15,7 +15,6 @@ public class MoviesReader
         int processedLines = 0;
 
         var processorCount = Environment.ProcessorCount;
-        Console.WriteLine($"Using {processorCount} processor cores");
 
         var linesQueue = new BlockingCollection<string>(boundedCapacity: 10000);
         var moviesQueue = new BlockingCollection<Movie>(boundedCapacity: 1000);
@@ -25,7 +24,7 @@ public class MoviesReader
         {
             try
             {
-                using (var reader = new StreamReader(path))
+                using (var reader = new StreamReader(path)) 
                 {
                     reader.ReadLine();
                     string? line;

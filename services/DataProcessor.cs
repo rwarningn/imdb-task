@@ -1,5 +1,6 @@
 using IMDbApplication.Models;
 using IMDbApplication.Readers;
+using System.Diagnostics;
 
 namespace IMDbApplication.Services;
 
@@ -11,7 +12,9 @@ public class DataProcessor
         LoadAllData(string movieCodesPath, string actorNamesPath, string actorCodesPath, 
                    string ratingsPath, string linksPath, string tagCodesPath, string tagScoresPath)
     {
-        Console.WriteLine("=== START LOADING ===\n");
+        var totalStopwatch = Stopwatch.StartNew();
+        Console.WriteLine("=== START DATA LOADING WITH PIPELINES ===\n");
+        Console.WriteLine($"System: {Environment.ProcessorCount} processor cores available\n");
         
         Console.WriteLine("1. Loading movies...");
         var movies = MoviesReader.LoadMovies(movieCodesPath);
@@ -29,12 +32,13 @@ public class DataProcessor
         var movieLensToImdb = TagsReader.LoadLinks(linksPath);
         var tagsIndex = TagsReader.LoadTagNames(tagCodesPath);
         TagsReader.ProcessTagScores(movies, movieLensToImdb, tagsIndex, tagScoresPath);
-        
+
         Console.WriteLine("\n6. Creating indexes...");
         var peopleToMovies = CreatePeopleToMoviesIndex(movies, peopleIndex);
         var tagsToMovies = CreateTagsToMoviesIndex(movies);
-        
+
         Console.WriteLine("\n=== COMPLETE ===");
+        Console.WriteLine($"Total execution time: {totalStopwatch.ElapsedMilliseconds} ms ({totalStopwatch.ElapsedMilliseconds/1000} sec)");
         Console.WriteLine($"Total: {movies.Count} movies, {peopleToMovies.Count} people, {tagsToMovies.Count} tags\n");
         
         return (movies, peopleToMovies, tagsToMovies);
