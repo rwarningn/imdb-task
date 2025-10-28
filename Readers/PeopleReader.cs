@@ -10,14 +10,8 @@ public class PeopleReader
     public static Dictionary<string, Person> LoadPeople(string path)
     {
         var stopwatch = Stopwatch.StartNew();
-        var people = new ConcurrentDictionary<string, Person>();
         int totalLines = 0;
-        int personIdCounter = 0;
-
-        var processorCount = Environment.ProcessorCount;
-
         var linesQueue = new BlockingCollection<string>(boundedCapacity: 10000);
-        var peopleQueue = new BlockingCollection<KeyValuePair<string, Person>>(boundedCapacity: 1000);
 
         var readerTask = Task.Run(() =>
         {
@@ -41,13 +35,18 @@ public class PeopleReader
             }
         });
 
+        var localDictionaries = new ConcurrentBag<Dictionary<string, Person>>();
+        var processorCount = Environment.ProcessorCount;
         var parserTasks = new Task[processorCount];
+        var personIdCounter = 0;
         int errorCount = 0;
 
         for (int i = 0; i < processorCount; i++)
         {
             parserTasks[i] = Task.Run(() =>
             {
+                var localResult = new Dictionary<string, Person>(1_200_000);
+
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
                     try
@@ -68,7 +67,7 @@ public class PeopleReader
                         int.TryParse(fields[2], out int birthYear);
                         int? deathYear = fields[3] != "\\N" && int.TryParse(fields[3], out int death) ? death : null;
 
-                        var person = new Person
+                        localResult[nconst] = new Person
                         {
                             ID = Interlocked.Increment(ref personIdCounter),
                             FirstName = firstName,
@@ -76,8 +75,6 @@ public class PeopleReader
                             BirthYear = birthYear,
                             DeathYear = deathYear
                         };
-
-                        peopleQueue.Add(new KeyValuePair<string, Person>(nconst, person));
                     }
                     catch (Exception ex)
                     {
@@ -88,21 +85,22 @@ public class PeopleReader
                         }
                     }
                 }
+                localDictionaries.Add(localResult);
             });
         }
 
-        var aggregatorTask = Task.Run(() =>
-        {
-            foreach (var kvp in peopleQueue.GetConsumingEnumerable())
-            {
-                people.TryAdd(kvp.Key, kvp.Value);
-            }
-        });
-
         readerTask.Wait();
         Task.WaitAll(parserTasks);
-        peopleQueue.CompleteAdding();
-        aggregatorTask.Wait();
+
+        var finalPeople = new Dictionary<string, Person>(totalLines);
+        foreach (var localDict in localDictionaries)
+        {
+            foreach (var pair in localDict)
+            {
+                finalPeople[pair.Key] = pair.Value;
+            }            
+        }
+
 
         if (errorCount > 0)
         {
@@ -110,9 +108,9 @@ public class PeopleReader
         }
 
         stopwatch.Stop();
-        Console.WriteLine($"Loaded {people.Count} people from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
+        Console.WriteLine($"Loaded {finalPeople.Count} people from {totalLines} records in {stopwatch.ElapsedMilliseconds} ms");
 
-        return new Dictionary<string, Person>(people);
+        return finalPeople;
     }
 
     public static void LinkPeopleToMovies(Dictionary<string, Movie> movies,
@@ -121,13 +119,9 @@ public class PeopleReader
     {
         var stopwatch = Stopwatch.StartNew();
         int totalLines = 0;
-        int linksCreated = 0;
-
         var processorCount = Environment.ProcessorCount;
-
         var linesQueue = new BlockingCollection<string>(boundedCapacity: 10000);
 
-        // Reader
         var readerTask = Task.Run(() =>
         {
             try
@@ -150,6 +144,8 @@ public class PeopleReader
             }
         });
 
+        var localLinks = new ConcurrentBag<List<(Movie movie, Person person, string category)>>();
+
         var parserTasks = new Task[processorCount];
         int errorCount = 0;
 
@@ -157,6 +153,8 @@ public class PeopleReader
         {
             parserTasks[i] = Task.Run(() =>
             {
+                var localResult = new List<(Movie, Person, string)>(1_000_000);
+
                 foreach (var line in linesQueue.GetConsumingEnumerable())
                 {
                     try
@@ -173,35 +171,9 @@ public class PeopleReader
                         if (movies.TryGetValue(tconst, out var movie) &&
                             peopleIndex.TryGetValue(nconst, out var person))
                         {
-
-                            if (category == "director")
-                            {
-                                lock (movie)
-                                {
-                                    movie.Director = person.FullName;
-                                }
-
-                                lock (person.DirectedMovies)
-                                {
-                                    person.DirectedMovies.Add(movie);
-                                }
-                            }
-                            else if (category == "actor" || category == "actress")
-                            {
-                                lock (movie.Actors)
-                                {
-                                    if (!movie.Actors.Contains(person.FullName))
-                                        movie.Actors.Add(person.FullName);
-                                }
-
-                                lock (person.ActedMovies)
-                                {
-                                    person.ActedMovies.Add(movie);
-                                }
-                            }
-
-                            Interlocked.Increment(ref linksCreated);
+                            localResult.Add((movie, person, category));
                         }
+
                     }
                     catch (Exception ex)
                     {
@@ -212,11 +184,32 @@ public class PeopleReader
                         }
                     }
                 }
+                localLinks.Add(localResult);
             });
         }
 
         readerTask.Wait();
         Task.WaitAll(parserTasks);
+
+        int linksCreated = 0;
+        foreach (var localList in localLinks)
+        {
+            foreach (var (movie, person, category) in localList)
+            {
+                if (category == "director")
+                {
+                    movie.Director = person.FullName;
+                    person.DirectedMovies.Add(movie);
+                    linksCreated++;
+                }
+                else if (category == "actor" || category == "actress")
+                {
+                    movie.Actors.Add(person.FullName);
+                    person.ActedMovies.Add(movie);
+                    linksCreated++;
+                }
+            }
+        }
 
 
         stopwatch.Stop();
