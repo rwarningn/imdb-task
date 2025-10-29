@@ -4,38 +4,29 @@ using System.Globalization;
 
 namespace IMDbApplication.Utilities;
 
-
 public static class HardcodedParsers
 {
-    public static bool TryParseMovieLine(string line, out (string ImdbID, string Title) result)
+    // --- ДЛЯ MovieCodes_IMDB.tsv ---
+    public static bool TryParseMovieLine(string line, out (int id, string title) result)
     {
         result = default;
         try
         {
-            int tab1 = line.IndexOf('\t'); // 7
-            int tab2 = line.IndexOf('\t', tab1 + 1); // 16
-            int tab3 = line.IndexOf('\t', tab2 + 1); // 22
-            int tab4 = line.IndexOf('\t', tab3 + 1); // 29
-            int tab5 = line.IndexOf('\t', tab4 + 1); // 38
-            if (tab5 == -1) return false; 
+            int tab1 = line.IndexOf('\t');
+            int tab2 = line.IndexOf('\t', tab1 + 1);
+            int tab3 = line.IndexOf('\t', tab2 + 1);
+            if (tab3 == -1) return false;
 
-            string region = line.Substring(tab3 + 1, 2).ToLower();
-            string language = line.Substring(tab4 + 1, 2).ToUpper(); 
-
-            bool isSuitable = (region == "us" || region == "ru") || (language == "RU" || language == "EN");
-            if (!isSuitable) return false;
-
-            string imdbId = line.Substring(0, 9);
-            int titleStartIndex = line.IndexOf('\t', line.IndexOf('\t', 9) + 1) + 1;
-            int titleEndIndex = line.IndexOf('\t', titleStartIndex);
-            string title = line.Substring(titleStartIndex, titleEndIndex - titleStartIndex);
-
-            result = (imdbId, title);
+            int id = int.Parse(line.AsSpan(2, tab1 - 2));
+            string title = line.Substring(tab2 + 1, tab3 - tab2 - 1);
+            result = (id, title);
             return true;
         }
         catch { return false; }
     }
-    public static bool TryParsePersonLine(string line, out (string nconst, Person person) result)
+    
+    // --- ДЛЯ ActorsDirectorsNames_IMDB.txt ---
+    public static bool TryParsePersonLine(string line, out (int id, Person person) result)
     {
         result = default;
         try
@@ -46,9 +37,9 @@ public static class HardcodedParsers
             int tab4 = line.IndexOf('\t', tab3 + 1);
             if (tab4 == -1) return false;
 
-            string nconst = line.Substring(0, 9);
+            int id = int.Parse(line.AsSpan(2, tab1 - 2));
             string fullName = line.Substring(tab1 + 1, tab2 - tab1 - 1);
-            string birthYearStr = line.Substring(tab2 + 1, 4);
+            string birthYearStr = line.Substring(tab2 + 1, tab3 - tab2 - 1);
             string deathYearStr = line.Substring(tab3 + 1, tab4 - tab3 - 1);
 
             int.TryParse(birthYearStr, out int birthYear);
@@ -63,13 +54,14 @@ public static class HardcodedParsers
                 DeathYear = deathYear
             };
 
-            result = (nconst, person);
+            result = (id, person);
             return true;
         }
         catch { return false; }
     }
 
-    public static bool TryParseLinkLine(string line, out (string tconst, string nconst, string category) result)
+    // --- ДЛЯ ActorsDirectorsCodes_IMDB.tsv ---
+    public static bool TryParseLinkLine(string line, out (int movieId, int personId, string category) result)
     {
         result = default;
         try
@@ -79,30 +71,32 @@ public static class HardcodedParsers
             int tab3 = line.IndexOf('\t', tab2 + 1);
             int tab4 = line.IndexOf('\t', tab3 + 1);
             if (tab4 == -1) return false;
-
+            
+            int movieId = int.Parse(line.AsSpan(2, tab1 - 2));
+            int personId = int.Parse(line.AsSpan(tab2 + 3, tab3 - (tab2 + 3)));
             string category = line.Substring(tab3 + 1, tab4 - tab3 - 1);
-            if (category != "actor" && category != "actress" && category != "director") return false;
-
-            string tconst = line.Substring(0, 9);
-            string nconst = line.Substring(tab2 + 1, 9);
-
-            result = (tconst, nconst, category);
+            
+            result = (movieId, personId, category);
             return true;
         }
         catch { return false; }
     }
 
-    public static bool TryParseRatingLine(string line, out (string tconst, float rating) result)
+    // --- ДЛЯ Ratings_IMDB.tsv ---
+    public static bool TryParseRatingLine(string line, out (int movieId, float rating) result)
     {
         result = default;
         try
         {
+            int tab1 = line.IndexOf('\t');
+            int tab2 = line.IndexOf('\t', tab1 + 1);
+            if (tab2 == -1) return false;
 
-            string ratingStr = line.Substring(10, 3);
-            if (float.TryParse(ratingStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float rating))
+            var ratingSpan = line.AsSpan(tab1 + 1, tab2 - tab1 - 1);
+            if (float.TryParse(ratingSpan, NumberStyles.Any, CultureInfo.InvariantCulture, out float rating))
             {
-                string tconst = line.Substring(0, 9);
-                result = (tconst, rating);
+                int movieId = int.Parse(line.AsSpan(2, tab1 - 2));
+                result = (movieId, rating);
                 return true;
             }
             return false;
@@ -110,31 +104,35 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    public static bool TryParseMovieLensLinkLine(string line, out (string movieLensId, string imdbId) result)
+    // --- ДЛЯ links_IMDB_MovieLens.csv ---
+    public static bool TryParseMovieLensLinkLine(string line, out (int movieLensId, int imdbId) result)
     {
         result = default;
         try
         {
             int comma1 = line.IndexOf(',');
+            int comma2 = line.IndexOf(',', comma1 + 1);
+            if (comma2 == -1) return false;
 
-            string movieLensId = line.Substring(0, comma1);
-            string imdbId = line.Substring(comma1 + 1, 7);
+            int movieLensId = int.Parse(line.AsSpan(0, comma1));
+            int imdbId = int.Parse(line.AsSpan(comma1 + 1, comma2 - comma1 - 1));
 
-            result = (movieLensId, "tt" + imdbId);
+            result = (movieLensId, imdbId);
             return true;
         }
         catch { return false; }
     }
 
-    public static bool TryParseTagCodeLine(string line, out (string tagId, string tagName) result)
+    // --- ДЛЯ TagCodes_MovieLens.csv ---
+    public static bool TryParseTagCodeLine(string line, out (int tagId, string tagName) result)
     {
         result = default;
-
         try
         {
             int comma = line.IndexOf(',');
-        
-            string tagId = line.Substring(0, comma);
+            if (comma == -1) return false;
+            
+            int tagId = int.Parse(line.AsSpan(0, comma));
             string tagName = line.Substring(comma + 1);
             
             result = (tagId, tagName);
@@ -143,25 +141,21 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    public static bool TryParseTagScoreLine(string line, out (string movieId, string tagId) result, out float relevance)
+    // --- ДЛЯ TagScores_MovieLens.csv ---
+    public static bool TryParseTagScoreLine(string line, out (int movieLensId, int tagId) result)
     {
         result = default;
-        relevance = 0;
         try
         {
             int comma1 = line.IndexOf(',');
             int comma2 = line.IndexOf(',', comma1 + 1);
-                            
-            string relevanceStr = line.Substring(comma2 + 1, 3);
+            if (comma2 == -1) return false;
 
-            if (float.TryParse(relevanceStr, NumberStyles.Any, CultureInfo.InvariantCulture, out relevance) && relevance > 0.5f)
-            {
-                string movieId = line.Substring(0, comma1);
-                string tagId = line.Substring(comma1 + 1, comma2 - comma1 - 1);
-                result = (movieId, tagId);
-                return true;
-            }
-            return false;
+            int movieLensId = int.Parse(line.AsSpan(0, comma1));
+            int tagId = int.Parse(line.AsSpan(comma1 + 1, comma2 - comma1 - 1));
+
+            result = (movieLensId, tagId);
+            return true;
         }
         catch { return false; }
     }

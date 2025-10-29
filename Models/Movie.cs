@@ -9,8 +9,8 @@ public class Movie
     public string ImdbID { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public float Rating { get; set; } = -1;
-    public string Director { get; set; } = string.Empty;
-    public HashSet<string> Actors { get; set; } = new HashSet<string>();
+    public Person? Director { get; set; } 
+    public HashSet<Person> Actors { get; set; } = new HashSet<Person>();
     public HashSet<string> Tags { get; set; } = new HashSet<string>();
 
     public override bool Equals(object? obj)

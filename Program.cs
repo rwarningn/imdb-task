@@ -5,14 +5,13 @@ namespace IMDbApplication;
 
 public class Program
 {
-    public static void Main()
+    public static async Task Main()
     {
-
         try
         {
             var programStopwatch = Stopwatch.StartNew();
             
-            var (movies, peopleToMovies, tagsToMovies) = DataProcessor.LoadAllData(
+            var (movies, peopleToMovies, tagsToMovies) = await DataProcessor.LoadAllData(
                 movieCodesPath: "data/MovieCodes_IMDB.tsv",
                 actorNamesPath: "data/ActorsDirectorsNames_IMDB.txt", 
                 actorCodesPath: "data/ActorsDirectorsCodes_IMDB.tsv",
@@ -25,7 +24,7 @@ public class Program
             DataPrinter.PrintStatistics(movies, peopleToMovies, tagsToMovies);
             
             programStopwatch.Stop();
-            Console.WriteLine($"\n COMPLETED IN {programStopwatch.ElapsedMilliseconds} MS ({programStopwatch.ElapsedMilliseconds/1000:F1} SEC)");
+            Console.WriteLine($"\n COMPLETED IN {programStopwatch.ElapsedMilliseconds} MS ({programStopwatch.ElapsedMilliseconds/1000} SEC)");
             
             // Интерактивный режим
             Console.WriteLine("\n=== INTERACTIVE SEARCH ===");
@@ -81,9 +80,7 @@ public class Program
                 searchStopwatch.Stop();
                 Console.WriteLine($"\n Search completed in {searchStopwatch.ElapsedMilliseconds} ms");
             }
-            
         }
-        
         catch (Exception ex)
         {
             Console.WriteLine($"Error while processing data: {ex.Message}");
