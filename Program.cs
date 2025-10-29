@@ -26,7 +26,6 @@ public class Program
             programStopwatch.Stop();
             Console.WriteLine($"\n COMPLETED IN {programStopwatch.ElapsedMilliseconds} MS ({programStopwatch.ElapsedMilliseconds/1000} SEC)");
             
-            // Интерактивный режим
             Console.WriteLine("\n=== INTERACTIVE SEARCH ===");
             Console.WriteLine("Commands:");
             Console.WriteLine("  movie <TITLE>  - search a movie");

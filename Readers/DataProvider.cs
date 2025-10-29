@@ -1,4 +1,3 @@
-// Services/DataProvider.cs
 using IMDbApplication.Models;
 using IMDbApplication.Utilities;
 using System.Collections.Concurrent;
@@ -9,7 +8,6 @@ namespace IMDbApplication.Services;
 
 public class DataProvider
 {
-    // --- КОНВЕЙЕР ДЛЯ ФИЛЬМОВ (MovieCodes_IMDB.tsv) ---
     public async Task LoadMoviesAsync(string path, ConcurrentDictionary<int, Movie> movies)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -30,7 +28,6 @@ public class DataProvider
         Console.WriteLine($"   Completed: Movies loaded in {stopwatch.ElapsedMilliseconds} ms. Found: {movies.Count}");
     }
     
-    // --- КОНВЕЙЕР ДЛЯ ИМЕН (ActorsDirectorsNames_IMDB.txt) ---
     public async Task LoadNamesAsync(string path, ConcurrentDictionary<int, Person> people)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -49,7 +46,6 @@ public class DataProvider
         Console.WriteLine($"   Completed: People Names loaded in {stopwatch.ElapsedMilliseconds} ms");
     }
 
-    // --- КОНВЕЙЕР ДЛЯ СВЯЗЕЙ (ActorsDirectorsCodes_IMDB.tsv) ---
     public async Task LinkPeopleToMoviesAsync(string path, ConcurrentDictionary<int, Movie> movies, ConcurrentDictionary<int, Person> people)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -69,27 +65,25 @@ public class DataProvider
         stopwatch.Stop();
         Console.WriteLine($"   Completed: Links created in {stopwatch.ElapsedMilliseconds} ms");
     }
-    
-    // --- КОНВЕЙЕР ДЛЯ РЕЙТИНГОВ (Ratings_IMDB.tsv) ---
+
     public async Task LoadRatingsAsync(string path, ConcurrentDictionary<int, Movie> movies)
     {
         var stopwatch = Stopwatch.StartNew();
         Console.WriteLine("-> Starting: Load Ratings...");
-        
+
         var lines = new BlockingCollection<string>(5000);
         var parsed = new BlockingCollection<(int movieId, float rating)>(5000);
 
         var readTask = Task.Run(() => ReadFileLines(path, lines));
         var parseTask = Task.Run(() => ParseRatingLines(lines, parsed));
         var appendTask = AppendRatingsAsync(parsed, movies);
-        
+
         await Task.WhenAll(readTask, parseTask, appendTask);
-        
+
         stopwatch.Stop();
         Console.WriteLine($"   Completed: Ratings loaded in {stopwatch.ElapsedMilliseconds} ms");
     }
     
-    // --- КОНВЕЙЕР ДЛЯ MOVIELENS ЛИНКОВ (links_IMDB_MovieLens.csv) ---
     public async Task LoadMovieLensLinksAsync(string path, ConcurrentDictionary<int, int> links)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -108,7 +102,6 @@ public class DataProvider
         Console.WriteLine($"   Completed: MovieLens Links loaded in {stopwatch.ElapsedMilliseconds} ms");
     }
     
-    // --- КОНВЕЙЕР ДЛЯ НАЗВАНИЙ ТЕГОВ (TagCodes_MovieLens.csv) ---
     public async Task LoadTagNamesAsync(string path, ConcurrentDictionary<int, string> tagNames)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -127,7 +120,6 @@ public class DataProvider
         Console.WriteLine($"   Completed: Tag Names loaded in {stopwatch.ElapsedMilliseconds} ms");
     }
     
-    // --- КОНВЕЙЕР ДЛЯ ТЕГОВ ФИЛЬМОВ (TagScores_MovieLens.csv) ---
     public async Task LinkTagsToMoviesAsync(string path, ConcurrentDictionary<int, Movie> movies, ConcurrentDictionary<int, int> links, ConcurrentDictionary<int, string> tagNames)
     {
         var stopwatch = Stopwatch.StartNew();

@@ -1,4 +1,3 @@
-// Utilities/HardcodedParsers.cs
 using IMDbApplication.Models;
 using System.Globalization;
 
@@ -6,7 +5,6 @@ namespace IMDbApplication.Utilities;
 
 public static class HardcodedParsers
 {
-    // --- ДЛЯ MovieCodes_IMDB.tsv ---
     public static bool TryParseMovieLine(string line, out (int id, string title) result)
     {
         result = default;
@@ -25,7 +23,6 @@ public static class HardcodedParsers
         catch { return false; }
     }
     
-    // --- ДЛЯ ActorsDirectorsNames_IMDB.txt ---
     public static bool TryParsePersonLine(string line, out (int id, Person person) result)
     {
         result = default;
@@ -59,8 +56,6 @@ public static class HardcodedParsers
         }
         catch { return false; }
     }
-
-    // --- ДЛЯ ActorsDirectorsCodes_IMDB.tsv ---
     public static bool TryParseLinkLine(string line, out (int movieId, int personId, string category) result)
     {
         result = default;
@@ -82,7 +77,6 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    // --- ДЛЯ Ratings_IMDB.tsv ---
     public static bool TryParseRatingLine(string line, out (int movieId, float rating) result)
     {
         result = default;
@@ -104,7 +98,6 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    // --- ДЛЯ links_IMDB_MovieLens.csv ---
     public static bool TryParseMovieLensLinkLine(string line, out (int movieLensId, int imdbId) result)
     {
         result = default;
@@ -123,7 +116,6 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    // --- ДЛЯ TagCodes_MovieLens.csv ---
     public static bool TryParseTagCodeLine(string line, out (int tagId, string tagName) result)
     {
         result = default;
@@ -141,7 +133,6 @@ public static class HardcodedParsers
         catch { return false; }
     }
 
-    // --- ДЛЯ TagScores_MovieLens.csv ---
     public static bool TryParseTagScoreLine(string line, out (int movieLensId, int tagId) result)
     {
         result = default;

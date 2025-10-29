@@ -1,6 +1,4 @@
-// Services/DataPrinter.cs
 using IMDbApplication.Models;
-using System.Linq;
 
 namespace IMDbApplication.Services;
 
