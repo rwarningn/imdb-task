@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-
 namespace IMDbApplication.Models;
-
 
 public class Tag
 {

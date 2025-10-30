@@ -22,7 +22,7 @@ public class Processor
         var read = Task.Run(() => ReadFile(path, raw));
         var filter = Task.Run(() => FilterMovieLines(raw, filtered));
         var parse = Task.Run(() => ParseMovieLines(filtered, parsed));
-        var process = Task.Run(() => ProcessMovieLines(parsed, Movies));
+        var process = ProcessItemsAsync(parsed, (p) => Movies.TryAdd(p.id, new Movie { ID = p.id, Title = p.title }));
 
         return Task.WhenAll(read, filter, parse, process);
     }
@@ -33,16 +33,10 @@ public class Processor
         var parsed = new BlockingCollection<(int id, string name)>(10000);
 
         var read = Task.Run(() => ReadFile(path, raw));
-        
-        var parseTasks = Enumerable.Range(0, Environment.ProcessorCount)
-            .Select(_ => Task.Run(() => ParsePeopleLines(raw, parsed))).ToArray();
-        
-        var processingCompleted = Task.WhenAll(parseTasks).ContinueWith(_ => parsed.CompleteAdding());
+        var parse = Task.Run(() => ParsePeopleLines(raw, parsed));
+        var process = ProcessItemsAsync(parsed, (p) => People.TryAdd(p.id, new Person { ID = p.id, Name = p.name }));
 
-        var processTasks = Enumerable.Range(0, Environment.ProcessorCount)
-            .Select(_ => Task.Run(() => ProcessPeopleLines(parsed, People))).ToArray();
-
-        return Task.WhenAll(new[] { read }.Concat(parseTasks).Concat(new[] { processingCompleted }).Concat(processTasks));
+        return Task.WhenAll(read, parse, process);
     }
     
     public Task ProcessRatingsAsync(string path)
@@ -52,7 +46,7 @@ public class Processor
 
         var read = Task.Run(() => ReadFile(path, raw));
         var parse = Task.Run(() => ParseRatingLines(raw, parsed));
-        var process = Task.Run(() => ProcessRatingLines(parsed, Movies));
+        var process = ProcessRatingsAsync(parsed);
 
         return Task.WhenAll(read, parse, process);
     }
@@ -64,7 +58,7 @@ public class Processor
 
         var read = Task.Run(() => ReadFile(path, raw));
         var parse = Task.Run(() => ParseMovieLensLinkLines(raw, parsed));
-        var process = Task.Run(() => ProcessMovieLensLinkLines(parsed, MovieLensLinks));
+        var process = ProcessMovieLensLinkLinesAsync(parsed);
 
         return Task.WhenAll(read, parse, process);
     }
@@ -76,7 +70,7 @@ public class Processor
 
         var read = Task.Run(() => ReadFile(path, raw));
         var parse = Task.Run(() => ParseTagLines(raw, parsed));
-        var process = Task.Run(() => ProcessTagLines(parsed, Tags));
+        var process = ProcessTagLinesAsync(parsed);
 
         return Task.WhenAll(read, parse, process);
     }
@@ -90,7 +84,7 @@ public class Processor
         var read = Task.Run(() => ReadFile(path, raw));
         var filter = Task.Run(() => FilterTagScoreLines(raw, filtered));
         var parse = Task.Run(() => ParseTagScoreLines(filtered, parsed));
-        var process = ProcessTagScoreLinesAsync(parsed, Movies, Tags, MovieLensLinks);
+        var process = ProcessTagScoreLinesAsync(parsed);
 
         return Task.WhenAll(read, filter, parse, process);
     }
@@ -104,7 +98,7 @@ public class Processor
         var read = Task.Run(() => ReadFile(path, raw));
         var filter = Task.Run(() => FilterActorLinkLines(raw, filtered));
         var parse = Task.Run(() => ParseActorLinkLines(filtered, parsed));
-        var process = ProcessActorLinkLinesAsync(parsed, Movies, People);
+        var process = ProcessActorLinkLinesAsync(parsed);
 
         return Task.WhenAll(read, filter, parse, process);
     }
@@ -115,232 +109,147 @@ public class Processor
     
     private void ReadFile(string path, BlockingCollection<string> output)
     {
-        try {
-            using var reader = new StreamReader(path);
-            reader.ReadLine();
-            while (reader.ReadLine() is { } line) output.Add(line);
-        } finally { output.CompleteAdding(); }
+        try { using var reader = new StreamReader(path); reader.ReadLine(); while (reader.ReadLine() is { } line) output.Add(line); } finally { output.CompleteAdding(); }
     }
     
     private void FilterMovieLines(BlockingCollection<string> input, BlockingCollection<string> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int tab1 = line.IndexOf('\t');
-                int tab2 = line.IndexOf('\t', tab1 + 1);
-                int tab3 = line.IndexOf('\t', tab2 + 1);
-                int tab4 = line.IndexOf('\t', tab3 + 1);
-
-                string region = line.Substring(tab3 + 1, 2).ToLower();
-                string language = line.Substring(tab4 + 1, 2).ToUpper();
-                bool isSuitable = (region == "us" || region == "ru") || (language == "RU" || language == "EN");
-                
-                if (isSuitable) {
-                    output.Add(line);
-                }
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) {
+            var parts = line.Split('\t');
+            if (parts.Length < 5) continue;
+            string region = parts[3];
+            string language = parts[4];
+            if (string.Equals(region, "us", StringComparison.OrdinalIgnoreCase) || string.Equals(region, "ru", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(language, "en", StringComparison.OrdinalIgnoreCase) || string.Equals(language, "ru", StringComparison.OrdinalIgnoreCase))
+                output.Add(line);
+        } } finally { output.CompleteAdding(); }
     }
 
     private void FilterTagScoreLines(BlockingCollection<string> input, BlockingCollection<string> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int lastComma = line.LastIndexOf(',');
-                if (float.TryParse(line.Substring(lastComma + 1), NumberStyles.Any, CultureInfo.InvariantCulture,
-                    out float relevance) && relevance > 0.5f)
-                    output.Add(line);
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) {
+            var parts = line.Split(',');
+            if (parts.Length < 3) continue;
+            if (float.TryParse(parts[2], NumberStyles.Any, CultureInfo.InvariantCulture, out float relevance) && relevance > 0.5f)
+                output.Add(line);
+        } } finally { output.CompleteAdding(); }
     }
 
     private void FilterActorLinkLines(BlockingCollection<string> input, BlockingCollection<string> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int tab1 = line.IndexOf('\t');
-                int tab2 = line.IndexOf('\t', tab1 + 1);
-                int tab3 = line.IndexOf('\t', tab2 + 1);
-                int tab4 = line.IndexOf('\t', tab3 + 1);
-
-                var role = line.Substring(tab3 + 1, tab4 - tab3 - 1).ToLower();
-                if (role.Equals("director") || 
-                    role.Equals("actor") || 
-                    role.Equals("actress"))
-                    output.Add(line);
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) {
+            var parts = line.Split('\t');
+            if (parts.Length < 4) continue;
+            string category = parts[3];
+            if (category == "actor" || category == "actress" || category == "director")
+                output.Add(line);
+        } } finally { output.CompleteAdding(); }
     }
 
     private void ParseMovieLines(BlockingCollection<string> input, BlockingCollection<(int id, string title)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int id = int.Parse(line.Substring(2, 7));
-
-                int titleStartIndex = line.IndexOf('\t', line.IndexOf('\t', 9) + 1) + 1;
-                int titleEndIndex = line.IndexOf('\t', titleStartIndex);
-
-                string title = line.Substring(titleStartIndex, titleEndIndex - titleStartIndex);
-                output.Add((id, title));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split('\t');
+            output.Add((int.Parse(parts[0].AsSpan(2)), parts[2]));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
 
     private void ParsePeopleLines(BlockingCollection<string> input, BlockingCollection<(int id, string name)> output)
     {
-        foreach (var line in input.GetConsumingEnumerable()) {
-            try {
-                int id = int.Parse(line.Substring(2, 7));
-                int tab1 = line.IndexOf('\t');
-                int tab2 = line.IndexOf('\t', tab1 + 1);
-                string name = line.Substring(tab1 + 1, tab2 - tab1 - 1);
-                output.Add((id, name));
-            } catch {}
-        }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split('\t');
+            output.Add((int.Parse(parts[0].AsSpan(2)), parts[1]));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
     
     private void ParseRatingLines(BlockingCollection<string> input, BlockingCollection<(int id, float rating)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int titleId = int.Parse(line.Substring(2, 7));
-                float rating = float.Parse(line.Substring(10, 3), CultureInfo.InvariantCulture);
-                output.Add((titleId, rating));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split('\t');
+            output.Add((int.Parse(parts[0].AsSpan(2)), float.Parse(parts[1], CultureInfo.InvariantCulture)));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
 
     private void ParseMovieLensLinkLines(BlockingCollection<string> input, BlockingCollection<(int movieLensId, int imdbId)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int firstCommaIndex = line.IndexOf(',');
-                int movieId = int.Parse(line.Substring(0, firstCommaIndex));
-                int imdbId = int.Parse(line.Substring(firstCommaIndex + 1, 7));
-                output.Add((movieId, imdbId));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split(',');
+            output.Add((int.Parse(parts[0]), int.Parse(parts[1])));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
 
     private void ParseTagLines(BlockingCollection<string> input, BlockingCollection<(int id, string name)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int firstCommaIndex = line.IndexOf(',');
-                int tagId = int.Parse(line.Substring(0, firstCommaIndex));
-                string tag = line.Substring(firstCommaIndex + 1);
-                output.Add((tagId, tag));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split(',');
+            output.Add((int.Parse(parts[0]), parts[1]));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
 
     private void ParseTagScoreLines(BlockingCollection<string> input, BlockingCollection<(int movieId, int tagId)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int firstCommaIndex = line.IndexOf(',');
-                int secondCommaIndex = line.IndexOf(',', firstCommaIndex + 1);
-
-                int movieId = int.Parse(line.Substring(0, firstCommaIndex));
-                int tagId = int.Parse(line.Substring(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
-                output.Add((movieId, tagId));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split(',');
+            output.Add((int.Parse(parts[0]), int.Parse(parts[1])));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
 
     private void ParseActorLinkLines(BlockingCollection<string> input, BlockingCollection<(int movieId, int personId, string category)> output)
     {
-        try {
-            foreach (var line in input.GetConsumingEnumerable()) {
-                int tab1 = line.IndexOf('\t');
-                int tab2 = line.IndexOf('\t', tab1 + 1);
-                int tab3 = line.IndexOf('\t', tab2 + 1);
-
-                int titleId = int.Parse(line.Substring(2, 7));
-                int humanId = int.Parse(line.Substring(tab2 + 3, 7));
-                string category = line.Substring(tab3 + 1, 1).ToLower() == "d" ? "director" : "actor";
-                output.Add((titleId, humanId, category));
-            }
-        } finally { output.CompleteAdding(); }
+        try { foreach (var line in input.GetConsumingEnumerable()) { try {
+            var parts = line.Split('\t');
+            output.Add((int.Parse(parts[0].AsSpan(2)), int.Parse(parts[2].AsSpan(2)), parts[3]));
+        } catch {} } } finally { output.CompleteAdding(); }
     }
     
-    private void ProcessMovieLines(BlockingCollection<(int, string)> input, ConcurrentDictionary<int, Movie> output)
-    {
-        foreach (var (id, title) in input.GetConsumingEnumerable()) {
-            output.TryAdd(id, new Movie { ID = id, Title = title });
-        }
-    }
-    
-    private void ProcessPeopleLines(BlockingCollection<(int, string)> input, ConcurrentDictionary<int, Person> output)
-    {
-        foreach (var (id, name) in input.GetConsumingEnumerable()) {
-            output.TryAdd(id, new Person { ID = id, Name = name });
-        }
-    }
-
-    private void ProcessRatingLines(BlockingCollection<(int, float)> input, ConcurrentDictionary<int, Movie> output)
-    {
-        foreach (var (id, rating) in input.GetConsumingEnumerable()) {
-            if (output.TryGetValue(id, out var movie))
-                movie.Rating = rating;
-        }
-    }
-
-    private void ProcessMovieLensLinkLines(BlockingCollection<(int, int)> input, ConcurrentDictionary<int, int> output)
-    {
-        foreach (var (movieLensId, imdbId) in input.GetConsumingEnumerable()) {
-            output.TryAdd(movieLensId, imdbId);
-        }
-    }
-
-    private void ProcessTagLines(BlockingCollection<(int, string)> input, ConcurrentDictionary<int, Tag> output)
-    {
-        foreach (var (id, name) in input.GetConsumingEnumerable()) {
-            output.TryAdd(id, new Tag { ID = id, Name = name });
-        }
-    }
-
-    private Task ProcessTagScoreLinesAsync(BlockingCollection<(int, int)> input, ConcurrentDictionary<int, Movie> movies, ConcurrentDictionary<int, Tag> tags, ConcurrentDictionary<int, int> links)
+    private Task ProcessItemsAsync<T>(BlockingCollection<T> input, Action<T> processAction)
     {
         var tasks = Enumerable.Range(0, Environment.ProcessorCount).Select(_ => Task.Run(() => {
-            foreach (var (movieId, tagId) in input.GetConsumingEnumerable()) {
-                if (links.TryGetValue(movieId, out var imdbId) && movies.TryGetValue(imdbId, out var movie) && tags.TryGetValue(tagId, out var tag)) 
-                {
-                    lock (movie.Tags)
-                    {
-                        movie.Tags.Add(tag);
-                    }
-                }
+            foreach (var item in input.GetConsumingEnumerable()) {
+                processAction(item);
             }
         })).ToArray();
         return Task.WhenAll(tasks);
     }
+    
+    private Task ProcessMoviesAsync(BlockingCollection<(int id, string title)> input) => 
+        ProcessItemsAsync(input, (p) => Movies.TryAdd(p.id, new Movie { ID = p.id, Title = p.title }));
 
-    private Task ProcessActorLinkLinesAsync(BlockingCollection<(int, int, string)> input, ConcurrentDictionary<int, Movie> movies, ConcurrentDictionary<int, Person> people)
+    private Task ProcessPeopleAsync(BlockingCollection<(int id, string name)> input) => 
+        ProcessItemsAsync(input, (p) => People.TryAdd(p.id, new Person { ID = p.id, Name = p.name }));
+    
+    private Task ProcessRatingsAsync(BlockingCollection<(int id, float rating)> input) => 
+        ProcessItemsAsync(input, (p) => { if (Movies.TryGetValue(p.id, out var movie)) movie.Rating = p.rating; });
+
+    private Task ProcessMovieLensLinkLinesAsync(BlockingCollection<(int movieLensId, int imdbId)> input) => 
+        ProcessItemsAsync(input, (p) => MovieLensLinks.TryAdd(p.movieLensId, p.imdbId));
+
+    private Task ProcessTagLinesAsync(BlockingCollection<(int id, string name)> input) => 
+        ProcessItemsAsync(input, (p) => Tags.TryAdd(p.id, new Tag { ID = p.id, Name = p.name }));
+
+    private Task ProcessTagScoreLinesAsync(BlockingCollection<(int movieId, int tagId)> input)
     {
-        var tasks = Enumerable.Range(0, Environment.ProcessorCount).Select(_ => Task.Run(() => {
-            foreach (var (movieId, personId, category) in input.GetConsumingEnumerable()) {
-                if (movies.TryGetValue(movieId, out var movie) && people.TryGetValue(personId, out var person)) 
-                {
-                    lock (person.Movies)
-                    {
-                        person.Movies.Add(movie);
-                    }
+        return ProcessItemsAsync(input, (p) => {
+            if (MovieLensLinks.TryGetValue(p.movieId, out var imdbId) && Movies.TryGetValue(imdbId, out var movie) && Tags.TryGetValue(p.tagId, out var tag)) {
+                lock (movie.Tags) movie.Tags.Add(tag);
+                lock (tag.Movies) tag.Movies.Add(movie);
+            }
+        });
+    }
 
-                    if (category == "director") movie.Director = person.Name;
-
-                    else
-                    {
-                        lock (movie.Actors)
-                        {
-                            movie.Actors.Add(person);
-                        }
-                    }
+    private Task ProcessActorLinkLinesAsync(BlockingCollection<(int movieId, int personId, string category)> input)
+    {
+        return ProcessItemsAsync(input, (p) => {
+            if (Movies.TryGetValue(p.movieId, out var movie) && People.TryGetValue(p.personId, out var person)) {
+                if (p.category == "director") {
+                    movie.Director = person;
+                    lock (person.DirectedMovies) person.DirectedMovies.Add(movie);
+                } else {
+                    lock (movie.Actors) movie.Actors.Add(person);
+                    lock (person.ActedInMovies) person.ActedInMovies.Add(movie);
                 }
             }
-        })).ToArray();
-        return Task.WhenAll(tasks);
+        });
     }
     
     #endregion
