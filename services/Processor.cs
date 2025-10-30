@@ -147,7 +147,8 @@ public class Processor
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
                 int lastComma = line.LastIndexOf(',');
-                if (lastComma != -1 && float.TryParse(line.AsSpan(lastComma + 1), NumberStyles.Any, CultureInfo.InvariantCulture, out float relevance) && relevance > 0.5f)
+                if (lastComma != -1 && float.TryParse(line.Substring(lastComma + 1), NumberStyles.Any, CultureInfo.InvariantCulture,
+                    out float relevance) && relevance > 0.5f)
                     output.Add(line);
             }
         } finally { output.CompleteAdding(); }
@@ -157,20 +158,15 @@ public class Processor
     {
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
-                int tab3 = -1, tab4 = -1;
-                int currentTab = 0;
-                for (int i = 0; i < line.Length; i++) {
-                    if (line[i] == '\t') {
-                        currentTab++;
-                        if (currentTab == 3) tab3 = i;
-                        if (currentTab == 4) { tab4 = i; break; }
-                    }
-                }
-                if (tab4 == -1) continue;
-                var role = line.AsSpan(tab3 + 1, tab4 - tab3 - 1);
-                if (role.Equals("director", StringComparison.OrdinalIgnoreCase) || 
-                    role.Equals("actor", StringComparison.OrdinalIgnoreCase) || 
-                    role.Equals("actress", StringComparison.OrdinalIgnoreCase))
+                int tab1 = line.IndexOf('\t');
+                int tab2 = line.IndexOf('\t', tab1 + 1);
+                int tab3 = line.IndexOf('\t', tab2 + 1);
+                int tab4 = line.IndexOf('\t', tab3 + 1);
+
+                var role = line.Substring(tab3 + 1, tab4 - tab3 - 1).ToLower();
+                if (role.Equals("director") || 
+                    role.Equals("actor") || 
+                    role.Equals("actress"))
                     output.Add(line);
             }
         } finally { output.CompleteAdding(); }
@@ -180,9 +176,9 @@ public class Processor
     {
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
-                int id = int.Parse(line.AsSpan(2, 7));
-                int firstTabIndex = line.IndexOf('\t', 10);
-                string substringAfterFirstTab = line.Substring(firstTabIndex + 1);
+                int id = int.Parse(line.Substring(2, 7));
+                int tab1 = line.IndexOf('\t', 10);
+                string substringAfterFirstTab = line.Substring(tab1 + 1);
                 int secondTabIndex = substringAfterFirstTab.IndexOf('\t');
                 string title = substringAfterFirstTab.Substring(0, secondTabIndex);
                 output.Add((id, title));
@@ -194,10 +190,10 @@ public class Processor
     {
         foreach (var line in input.GetConsumingEnumerable()) {
             try {
-                int id = int.Parse(line.AsSpan(2, 7));
-                int firstTabIndex = line.IndexOf('\t');
-                int secondTabIndex = line.IndexOf('\t', firstTabIndex + 1);
-                string name = line.Substring(firstTabIndex + 1, secondTabIndex - firstTabIndex - 1);
+                int id = int.Parse(line.Substring(2, 7));
+                int tab1 = line.IndexOf('\t');
+                int tab2 = line.IndexOf('\t', tab1 + 1);
+                string name = line.Substring(tab1 + 1, tab2 - tab1 - 1);
                 output.Add((id, name));
             } catch {}
         }
@@ -207,8 +203,8 @@ public class Processor
     {
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
-                int titleId = int.Parse(line.AsSpan(2, 7));
-                float rating = float.Parse(line.AsSpan(10, 3), CultureInfo.InvariantCulture);
+                int titleId = int.Parse(line.Substring(2, 7));
+                float rating = float.Parse(line.Substring(10, 3), CultureInfo.InvariantCulture);
                 output.Add((titleId, rating));
             }
         } finally { output.CompleteAdding(); }
@@ -219,9 +215,9 @@ public class Processor
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
                 int firstCommaIndex = line.IndexOf(',');
-                int movieId = int.Parse(line.AsSpan(0, firstCommaIndex));
+                int movieId = int.Parse(line.Substring(0, firstCommaIndex));
                 int secondCommaIndex = line.IndexOf(',', firstCommaIndex + 1);
-                int imdbId = int.Parse(line.AsSpan(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
+                int imdbId = int.Parse(line.Substring(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
                 output.Add((movieId, imdbId));
             }
         } finally { output.CompleteAdding(); }
@@ -232,7 +228,7 @@ public class Processor
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
                 int firstCommaIndex = line.IndexOf(',');
-                int tagId = int.Parse(line.AsSpan(0, firstCommaIndex));
+                int tagId = int.Parse(line.Substring(0, firstCommaIndex));
                 string tag = line.Substring(firstCommaIndex + 1);
                 output.Add((tagId, tag));
             }
