@@ -126,12 +126,12 @@ public class Processor
     {
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
-                int firstTabIndex = line.IndexOf('\t');
-                int secondTabIndex = line.IndexOf('\t', firstTabIndex + 1);
-                int thirdTabIndex = line.IndexOf('\t', secondTabIndex + 1);
-                int tab4 = line.IndexOf('\t', thirdTabIndex + 1);
+                int tab1 = line.IndexOf('\t');
+                int tab2 = line.IndexOf('\t', tab1 + 1);
+                int tab3 = line.IndexOf('\t', tab2 + 1);
+                int tab4 = line.IndexOf('\t', tab3 + 1);
 
-                string region = line.Substring(thirdTabIndex + 1, 2).ToLower();
+                string region = line.Substring(tab3 + 1, 2).ToLower();
                 string language = line.Substring(tab4 + 1, 2).ToUpper();
                 bool isSuitable = (region == "us" || region == "ru") || (language == "RU" || language == "EN");
                 
@@ -147,7 +147,7 @@ public class Processor
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
                 int lastComma = line.LastIndexOf(',');
-                if (lastComma != -1 && float.TryParse(line.Substring(lastComma + 1), NumberStyles.Any, CultureInfo.InvariantCulture,
+                if (float.TryParse(line.Substring(lastComma + 1), NumberStyles.Any, CultureInfo.InvariantCulture,
                     out float relevance) && relevance > 0.5f)
                     output.Add(line);
             }
@@ -177,10 +177,11 @@ public class Processor
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
                 int id = int.Parse(line.Substring(2, 7));
-                int tab1 = line.IndexOf('\t', 10);
-                string substringAfterFirstTab = line.Substring(tab1 + 1);
-                int secondTabIndex = substringAfterFirstTab.IndexOf('\t');
-                string title = substringAfterFirstTab.Substring(0, secondTabIndex);
+
+                int titleStartIndex = line.IndexOf('\t', line.IndexOf('\t', 9) + 1) + 1;
+                int titleEndIndex = line.IndexOf('\t', titleStartIndex);
+
+                string title = line.Substring(titleStartIndex, titleEndIndex - titleStartIndex);
                 output.Add((id, title));
             }
         } finally { output.CompleteAdding(); }
@@ -216,8 +217,7 @@ public class Processor
             foreach (var line in input.GetConsumingEnumerable()) {
                 int firstCommaIndex = line.IndexOf(',');
                 int movieId = int.Parse(line.Substring(0, firstCommaIndex));
-                int secondCommaIndex = line.IndexOf(',', firstCommaIndex + 1);
-                int imdbId = int.Parse(line.Substring(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
+                int imdbId = int.Parse(line.Substring(firstCommaIndex + 1, 7));
                 output.Add((movieId, imdbId));
             }
         } finally { output.CompleteAdding(); }
@@ -241,8 +241,9 @@ public class Processor
             foreach (var line in input.GetConsumingEnumerable()) {
                 int firstCommaIndex = line.IndexOf(',');
                 int secondCommaIndex = line.IndexOf(',', firstCommaIndex + 1);
-                int movieId = int.Parse(line.AsSpan(0, firstCommaIndex));
-                int tagId = int.Parse(line.AsSpan(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
+
+                int movieId = int.Parse(line.Substring(0, firstCommaIndex));
+                int tagId = int.Parse(line.Substring(firstCommaIndex + 1, secondCommaIndex - firstCommaIndex - 1));
                 output.Add((movieId, tagId));
             }
         } finally { output.CompleteAdding(); }
@@ -252,12 +253,13 @@ public class Processor
     {
         try {
             foreach (var line in input.GetConsumingEnumerable()) {
-                int titleId = int.Parse(line.AsSpan(2, 7));
-                string remainingPart = line.Substring(10);
-                int tabIndex = remainingPart.IndexOf('\t');
-                string afterTab = remainingPart.Substring(tabIndex + 1);
-                int humanId = int.Parse(afterTab.AsSpan(2, 7));
-                string category = afterTab.Substring(10, 1) == "d" ? "director" : "actor";
+                int tab1 = line.IndexOf('\t');
+                int tab2 = line.IndexOf('\t', tab1 + 1);
+                int tab3 = line.IndexOf('\t', tab2 + 1);
+
+                int titleId = int.Parse(line.Substring(2, 7));
+                int humanId = int.Parse(line.Substring(tab2 + 3, 7));
+                string category = line.Substring(tab3 + 1, 1).ToLower() == "d" ? "director" : "actor";
                 output.Add((titleId, humanId, category));
             }
         } finally { output.CompleteAdding(); }

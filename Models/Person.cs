@@ -1,6 +1,3 @@
-using System.Collections.Concurrent;
-
-
 namespace IMDbApplication.Models;
 
 public class Person
