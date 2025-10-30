@@ -4,118 +4,104 @@ namespace IMDbApplication.Services;
 
 public static class DataPrinter
 {
-    public static void PrintStatistics(
-        Dictionary<string, Movie> movies, 
-        Dictionary<string, HashSet<Movie>> peopleToMovies, 
-        Dictionary<string, HashSet<Movie>> tagsToMovies)
-    {
-        Console.WriteLine("\n====================");
-        Console.WriteLine("GENERAL STATISTICS");
-        Console.WriteLine("====================");
-        Console.WriteLine($"Total movies: {movies.Count}");
-        
-        Console.WriteLine($"movies with rating: {movies.Values.Count(m => m.Rating > 0)}");
-        Console.WriteLine($"movies with director: {movies.Values.Count(m => m.Director != null)}");
-        Console.WriteLine($"movies with actors: {movies.Values.Count(m => m.Actors.Any())}");
-        Console.WriteLine($"movies with tags: {movies.Values.Count(m => m.Tags.Any())}");
-        
-        Console.WriteLine($"Total people: {peopleToMovies.Count}");
-        Console.WriteLine($"Total unique tags: {tagsToMovies.Count}");
-        
-        var avgRating = movies.Values.Where(m => m.Rating > 0).Average(m => m.Rating);
-        Console.WriteLine($"Average rating: {avgRating:F2}");
-    }
+    private static readonly string Separator = new('=', 50);
 
     public static void PrintMovieInfo(string title, Dictionary<string, Movie> movies)
     {
-        var foundMovies = movies.Values
-            .Where(m => m.Title.Contains(title, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(m => m.Rating)
-            .Take(10)
-            .ToList();
-            
-        if (!foundMovies.Any())
+        if (!movies.TryGetValue(title, out var movie))
         {
-            Console.WriteLine($"Movie '{title}' not found.");
+            Console.WriteLine($"Movie '{title}' is not found.");
             return;
         }
-        
-        Console.WriteLine($"Found {foundMovies.Count} movies for '{title}':");
-        foreach (var movie in foundMovies)
+
+        Console.WriteLine($"\n{Separator}");
+        Console.WriteLine("MOVIE INFO");
+        Console.WriteLine(Separator);
+        Console.WriteLine($"Title: {movie.Title}");
+        Console.WriteLine($"IMDB ID: tt{movie.ID:D7}");
+        Console.WriteLine($"Rating: {(movie.Rating > 0 ? movie.Rating.ToString("F1") + "/10" : "N/A")}");
+        Console.WriteLine($"Director: {(string.IsNullOrEmpty(movie.Director) ? "N/A" : movie.Director)}");
+
+        if (movie.Actors.Any())
         {
-            Console.WriteLine("--------------------");
-            Console.WriteLine($"Title: {movie.Title} ({movie.ImdbID})");
-            Console.WriteLine($"Rating: {(movie.Rating > 0 ? movie.Rating.ToString("F1") : "N/A")}");
-            
-            Console.WriteLine($"Director: {(movie.Director != null ? movie.Director.FullName : "N/A")}");
-            
-            if (movie.Actors.Any())
+            Console.WriteLine($"\nActors ({movie.Actors.Count}):");
+            var actorsList = movie.Actors.Take(15).ToList();
+            for (int i = 0; i < actorsList.Count; i++)
             {
-                var actorNames = movie.Actors.Select(a => a.FullName).OrderBy(n => n);
-                Console.WriteLine($"Actors: {string.Join(", ", actorNames)}");
+                Console.WriteLine($"  {i + 1}. {actorsList[i].Name}");
             }
-            
-            if (movie.Tags.Any())
+            if (movie.Actors.Count > 15)
+                Console.WriteLine($"  ... and {movie.Actors.Count - 15} more actors");
+        }
+
+        if (movie.Tags.Any())
+        {
+            Console.WriteLine($"\nTags ({movie.Tags.Count}):");
+            var tagsList = movie.Tags.Take(15).ToList();
+            for (int i = 0; i < tagsList.Count; i++)
             {
-                Console.WriteLine($"Tags: {string.Join(", ", movie.Tags.OrderBy(t => t))}");
+                Console.WriteLine($"  {i + 1}. {tagsList[i].Name}");
             }
+            if (movie.Tags.Count > 15)
+                Console.WriteLine($"  ... and {movie.Tags.Count - 15} more tags");
         }
     }
 
-    public static void PrintPersonInfo(string name, Dictionary<string, HashSet<Movie>> peopleToMovies)
+    public static void PrintPersonInfo(string name, Dictionary<string, Person> people)
     {
-        var foundPerson = peopleToMovies
-            .FirstOrDefault(p => p.Key.Equals(name, StringComparison.OrdinalIgnoreCase));
-            
-        if (foundPerson.Key == null)
+        if (!people.TryGetValue(name, out var person))
         {
-            Console.WriteLine($"Person '{name}' not found.");
+            Console.WriteLine($"Person '{name}' is not found.");
             return;
         }
         
-        Console.WriteLine($"Movies for '{foundPerson.Key}':");
-        
-        var personMovies = foundPerson.Value.OrderByDescending(m => m.Rating).ToList();
-        
-        foreach (var movie in personMovies)
+        var movies = person.Movies;
+        Console.WriteLine($"\n{Separator}");
+        Console.WriteLine($"INFORMATION ABOUT {person.Name.ToUpper()}");
+        Console.WriteLine(Separator);
+        Console.WriteLine($"Participated in {movies.Count} movies:");
+
+        var sortedMovies = movies.OrderByDescending(m => m.Rating).Take(20).ToList();
+        for (int i = 0; i < sortedMovies.Count; i++)
         {
-            string role = "Actor";
-            if (movie.Director != null && movie.Director.FullName.Equals(foundPerson.Key, StringComparison.OrdinalIgnoreCase))
-            {
-                role = "Director";
-            }
-            
-            Console.WriteLine($"  - {movie.Title} ({movie.Rating:F1}) as {role}");
+            var movie = sortedMovies[i];
+            string role = movie.Director == person.Name ? "Director" : "Actor";
+            string ratingStr = movie.Rating > 0 ? movie.Rating.ToString("F1") : "N/A";
+            Console.WriteLine($"  {i + 1}. {role}: {movie.Title} (Rating: {ratingStr})");
         }
+
+        if (movies.Count > 20)
+            Console.WriteLine($"  ... and {movies.Count - 20} more movies");
     }
 
-    public static void PrintTagInfo(string tagName, Dictionary<string, HashSet<Movie>> tagsToMovies)
+    public static void PrintTagInfo(string name, Dictionary<string, Tag> tags)
     {
-        if (!tagsToMovies.TryGetValue(tagName, out var foundMovies))
+        if (!tags.TryGetValue(name, out var tag))
         {
-            var foundPair = tagsToMovies.FirstOrDefault(t => t.Key.Equals(tagName, StringComparison.OrdinalIgnoreCase));
-            if (foundPair.Key != null)
-            {
-                foundMovies = foundPair.Value;
-                tagName = foundPair.Key;
-            }
-            else
-            {
-                Console.WriteLine($"Tag '{tagName}' not found.");
-                return;
-            }
+            Console.WriteLine($"Tag '{name}' is not found.");
+            return;
         }
-        
-        Console.WriteLine($"Top rated movies for tag '{tagName}':");
-        
-        var taggedMovies = foundMovies.OrderByDescending(m => m.Rating).Take(20).ToList();
-        
-        foreach (var movie in taggedMovies)
+
+        Console.WriteLine($"Tag '{name}' with ID {tag.ID} found.");
+
+    }
+        public static void PrintStatistics(Dictionary<string, Movie> movies, Dictionary<string, Person> people, Dictionary<string, Tag> tags)
+    {
+        Console.WriteLine($"\n{Separator}");
+        Console.WriteLine("GENERAL STATISTICS");
+        Console.WriteLine(Separator);
+        Console.WriteLine($"Total movies: {movies.Count}");
+        Console.WriteLine($"Movies with rating: {movies.Values.Count(m => m.Rating > 0)}");
+        Console.WriteLine($"Movies with director: {movies.Values.Count(m => !string.IsNullOrEmpty(m.Director))}");
+        Console.WriteLine($"Movies with actors: {movies.Values.Count(m => m.Actors.Any())}");
+        Console.WriteLine($"Movies with tags: {movies.Values.Count(m => m.Tags.Any())}");
+        Console.WriteLine($"Total people: {people.Count}");
+        Console.WriteLine($"Total unique tags: {tags.Count}");
+
+        if (movies.Values.Any(m => m.Rating > 0))
         {
-            string director = movie.Director != null ? movie.Director.FullName : "N/A";
-            string actors = movie.Actors.Any() ? $"{movie.Actors.First().FullName}, ..." : "N/A";
-            
-            Console.WriteLine($"  - {movie.Title} (Rating: {movie.Rating:F1}, Director: {director}, Actors: {actors})");
+            var avgRating = movies.Values.Where(m => m.Rating > 0).Average(m => m.Rating);
+            Console.WriteLine($"Average rating: {avgRating:F2}");
         }
     }
 }
